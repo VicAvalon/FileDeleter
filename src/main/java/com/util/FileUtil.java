@@ -23,7 +23,7 @@ public class FileUtil {
      */
     public File[] listThisFolderOfFile(String fullFilePath) {
         if (!new File(fullFilePath).isDirectory()) {
-            logger.warning("这不是文件夹：" + fullFilePath);
+            logger.warning("这不是文件夹 ：" + fullFilePath);
         }
         File file = new File(fullFilePath);
         return file.listFiles(new FileFilter() {
