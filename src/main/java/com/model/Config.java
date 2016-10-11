@@ -5,11 +5,24 @@ import com.util.JsonUtil;
 import jdk.nashorn.internal.parser.JSONParser;
 
 public class Config {
+    //原始需要扫描的文件夹
+    private String scanFolder;
     private String nowScanFolder;
+    private int nowScanFolderIndex = 0;
     private long nowScanFolderModifyTime;
     private String nowScanFile;
+    private int nowScanFileIndex = 0;
     private long nowScanFileModifyTime;
     private long utilStartScanTime;
+    private long duringTime;
+
+    public String getScanFolder() {
+        return scanFolder;
+    }
+
+    public void setScanFolder(String scanFolder) {
+        this.scanFolder = scanFolder;
+    }
 
     public String getNowScanFolder() {
         return nowScanFolder;
@@ -17,6 +30,14 @@ public class Config {
 
     public void setNowScanFolder(String nowScanFolder) {
         this.nowScanFolder = nowScanFolder;
+    }
+
+    public int getNowScanFolderIndex() {
+        return nowScanFolderIndex;
+    }
+
+    public void setNowScanFolderIndex(int nowScanFolderIndex) {
+        this.nowScanFolderIndex = nowScanFolderIndex;
     }
 
     public long getNowScanFolderModifyTime() {
@@ -35,6 +56,14 @@ public class Config {
         this.nowScanFile = nowScanFile;
     }
 
+    public int getNowScanFileIndex() {
+        return nowScanFileIndex;
+    }
+
+    public void setNowScanFileIndex(int nowScanFileIndex) {
+        this.nowScanFileIndex = nowScanFileIndex;
+    }
+
     public long getNowScanFileModifyTime() {
         return nowScanFileModifyTime;
     }
@@ -49,6 +78,14 @@ public class Config {
 
     public void setUtilStartScanTime(long utilStartScanTime) {
         this.utilStartScanTime = utilStartScanTime;
+    }
+
+    public long getDuringTime() {
+        return duringTime;
+    }
+
+    public void setDuringTime(long duringTime) {
+        this.duringTime = duringTime;
     }
 
     @Override
