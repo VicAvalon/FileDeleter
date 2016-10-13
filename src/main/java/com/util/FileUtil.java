@@ -23,15 +23,20 @@ public class FileUtil {
     private static final Logger logger = LoggerFactory.getLogger(FileUtil.class.getName());
     private static final int _1MB_SIZE = 1024 * 1024;
     private static final int _1KB_SIZE = 1024;
-    private static final String path = "./deleter/";
+    private static final int BIG_FILE_SIZE = _1MB_SIZE * 128;
+
+    private static final String path = "deleter/";
     private static final String logInfoPath = path + "log/logger.info";
     private static Config config;
 
-    private StringBuilder stringBuilder = new StringBuilder();
+    private boolean done;
+
+    private static StringBuilder stringBuilderForFileInfo = new StringBuilder();
 
     public FileUtil() {
         ObjectMapper objectMapper = new ObjectMapper();
         try{
+            logger.info(new File(path + "/deleter.config").getAbsolutePath());
             this.config = objectMapper.readValue(new File(path + "/deleter.config"), Config.class);
             if (ObjectUtils.isEmpty(this.config.getScanFolder())) {
                 logger.error("没有发现原始扫描需求，请在配置文件中配置，字段为scanFolder。");
@@ -50,11 +55,11 @@ public class FileUtil {
             }
             this.config.setUtilStartScanTime(System.currentTimeMillis());
             this.config.setNowScanFolderModifyTime(new File(config.getNowScanFolder()).lastModified());
-            if (!config.getNowScanFolder().equalsIgnoreCase(config.getScanFolder())) {
+            if (!config.getNowScanFolder().equals(config.getScanFolder())) {
                 this.config.setNowScanFolderIndex(this.findIndexOfFolder(this.config.getNowScanFolder()));
             }
         } catch (Exception e) {
-            logger.error("配置文件不存在。");
+            logger.error("配置文件不存在。" + e);
         }
     }
 
@@ -92,9 +97,8 @@ public class FileUtil {
 
     public long showDuringTime() {
         long duringTime =  System.currentTimeMillis() - config.getUtilStartScanTime();
-        if ((duringTime / 1000 != 0) && (duringTime / 1000 % 2 == 0)) {
-            logger.info("已耗时： " + duringTime/1000);
-        }
+        config.setDuringTime(duringTime);
+        logger.info("已耗时：" + duringTime + " 毫秒");
         return duringTime;
     }
 
@@ -115,23 +119,23 @@ public class FileUtil {
             fileInfo.setSize(new File(file).length());
             fileInfo.setLastModifyTime(new File(file).lastModified());
             //大于128mb文件不计算md5
-            if (fileInfo.getSize() < 128 * _1MB_SIZE) {
+            if (fileInfo.getSize() < BIG_FILE_SIZE) {
                 try {
                     fileInfo.setMd5(MD5FileUtil.getFileMD5String(new File(file)));
                 }catch (Exception e) {
                     logger.error("IO 错误：" + e);
                 }
             }
-            stringBuilder.append(fileInfo.toString() + "\r\n");
-
-            this.showDuringTime();
+            config.setNowScanFile(file);
+            config.setNowScanFileModifyTime(new File(file).lastModified());
+            stringBuilderForFileInfo.append(fileInfo.toString() + "\r\n");
 
             //缓存的文件信息大于10kb就写文件
-            if (stringBuilder.length() > _1KB_SIZE * 10 || i == fileList.size() - 1) {
+            if (stringBuilderForFileInfo.length() > _1KB_SIZE * 10) {
                 try {
                     logger.debug("writing a 10 kb ..." + file);
-                    FileUtils.writeStringToFile(new File(logInfoPath), stringBuilder.toString(), true);
-                    stringBuilder = new StringBuilder();
+                    FileUtils.writeStringToFile(new File(logInfoPath), stringBuilderForFileInfo.toString(), true);
+                    stringBuilderForFileInfo = new StringBuilder();
                     //信息日志文件大于10mb就另起一个日志文件
                     if (new File(logInfoPath).length() > 10 * _1MB_SIZE) {
                         FileUtils.moveFile(new File(logInfoPath),
@@ -142,10 +146,6 @@ public class FileUtil {
                 }catch (Exception e) {
                     logger.error("IO 错误：" + e);
                 }
-                config.setDuringTime(this.showDuringTime());
-                config.setNowScanFile(file);
-                config.setNowScanFileModifyTime(new File(file).lastModified());
-                this.writeConfig2File();
             }
         }
         //end
@@ -156,14 +156,14 @@ public class FileUtil {
             logger.warn("这不是文件夹 ：" + fullFilePath);
             return -1;
         }
-        if (fullFilePath.equalsIgnoreCase(config.getScanFolder())) {
+        if (fullFilePath.equals(config.getScanFolder())) {
             logger.warn("根路径无需寻找下标 ：" + fullFilePath);
             return -2;
         }
         String filePath = fullFilePath.substring(0, fullFilePath.lastIndexOf("\\"));
         FilesAndFolders filesAndFolders = this.listThisFolderOfFilesAndFolders(filePath);
         for (int i = 0; i < filesAndFolders.getFolders().size(); i++) {
-            if (fullFilePath.equalsIgnoreCase(filesAndFolders.getFolders().get(i))) {
+            if (fullFilePath.equals(filesAndFolders.getFolders().get(i))) {
                 return i;
             }
         }
@@ -174,14 +174,43 @@ public class FileUtil {
         return fullFilePath.substring(0, fullFilePath.lastIndexOf("\\"));
     }
 
+    public boolean isDone() {
+        return this.done;
+    }
+
     public static void main(String[] args) {
         FileUtil fileUtil = new FileUtil();
-        String endFolder = "";
-        fileUtil.writeConfig2File();
+        /*Thread timeThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (!fileUtil.isDone()) {
+                    try {
+                        fileUtil.showDuringTime();
+                        Thread.sleep(3000);
+                    } catch (Exception e) {
+                        logger.error("显示扫描用时错误：" + e);
+                    }
+                }
+            }
+        });
+        timeThread.start();
+        Thread configThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (!fileUtil.isDone()) {
+                    try {
+                        fileUtil.writeConfig2File();
+                        Thread.sleep(3000);
+                    } catch (Exception e) {
+                        logger.error("显示扫描用时错误：" + e);
+                    }
+                }
+            }
+        });
+        configThread.start();
         FilesAndFolders filesAndFolders = fileUtil.listThisFolderOfFilesAndFolders(config.getNowScanFolder());
         fileUtil.scanFiles(filesAndFolders.getFiles());
 
-        boolean endFlag = false;
         while (true) {
             if (filesAndFolders.getFolders().size() == 0) {
                 String preFolderPath = fileUtil.getPreFolder(config.getNowScanFolder());
@@ -189,7 +218,7 @@ public class FileUtil {
                 if (temp.getFolders().size() - 1 == config.getNowScanFolderIndex()) {
                     while (temp.getFolders().size() - 1 == config.getNowScanFolderIndex()) {
                         config.setNowScanFolder(preFolderPath);
-                        if (config.getNowScanFolder().equalsIgnoreCase(config.getScanFolder())) break;
+                        if (config.getNowScanFolder().equals(config.getScanFolder())) break;
                         int preFolderIndex = fileUtil.findIndexOfFolder(config.getNowScanFolder());
                         config.setNowScanFolderIndex(preFolderIndex);
                         preFolderPath = fileUtil.getPreFolder(config.getNowScanFolder());
@@ -208,9 +237,45 @@ public class FileUtil {
                 config.setNowScanFolderIndex(0);
             }
 
-            if (config.getNowScanFolder().equalsIgnoreCase(config.getScanFolder())) break;
+            if (config.getNowScanFolder().equals(config.getScanFolder())) break;
             filesAndFolders = fileUtil.listThisFolderOfFilesAndFolders(config.getNowScanFolder());
             fileUtil.scanFiles(filesAndFolders.getFiles());
         }
+        try {
+            FileUtils.writeStringToFile(new File(logInfoPath), stringBuilderForFileInfo.toString(), true);
+            fileUtil.writeConfig2File();
+            fileUtil.showDuringTime();
+            fileUtil.setDone(true);
+        }catch (Exception e) {
+            logger.error("IO 错误：" + e);
+        }*/
+        List<FileInfo> fileInfos = new ArrayList<>();
+        try {
+            List<String> strings = FileUtils.readLines(new File(logInfoPath));
+            strings.forEach(string -> {
+                try {
+                    fileInfos.add(new ObjectMapper().readValue(string, FileInfo.class));
+                } catch (Exception e) {
+
+                }
+            });
+            fileInfos.sort(new Comparator<FileInfo>() {
+                @Override
+                public int compare(FileInfo o1, FileInfo o2) {
+                    if (ObjectUtils.isEmpty(o1.getMd5()) || ObjectUtils.isEmpty(o2.getMd5())) {
+                        return -1;
+                    }
+                    return o1.getMd5().compareTo(o2.getMd5());
+                }
+            });
+            FileUtils.writeStringToFile(new File(logInfoPath + "aaaaaaa"), JsonUtil.getInstance().convertObjectToJsonString(fileInfos));
+        } catch (Exception e) {
+
+        }
+
+    }
+
+    public void setDone(boolean done) {
+        this.done = done;
     }
 }
