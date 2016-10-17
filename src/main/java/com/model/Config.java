@@ -15,6 +15,7 @@ public class Config {
     private long nowScanFileModifyTime;
     private long utilStartScanTime;
     private long duringTime;
+    private int status;
 
     public String getScanFolder() {
         return scanFolder;
@@ -86,6 +87,14 @@ public class Config {
 
     public void setDuringTime(long duringTime) {
         this.duringTime = duringTime;
+    }
+
+    public int getStatus() {
+        return status;
+    }
+
+    public void setStatus(int status) {
+        this.status = status;
     }
 
     @Override

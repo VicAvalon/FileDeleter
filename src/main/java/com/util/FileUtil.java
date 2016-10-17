@@ -29,8 +29,6 @@ public class FileUtil {
     private static final String logInfoPath = path + "log/logger.info";
     private static Config config;
 
-    private boolean done;
-
     private static StringBuilder stringBuilderForFileInfo = new StringBuilder();
 
     public FileUtil() {
@@ -95,11 +93,21 @@ public class FileUtil {
         return new FilesAndFolders(folders, files);
     }
 
-    public long showDuringTime() {
-        long duringTime =  System.currentTimeMillis() - config.getUtilStartScanTime();
-        config.setDuringTime(duringTime);
-        logger.info("已耗时：" + duringTime + " 毫秒");
-        return duringTime;
+    public void showDuringTime() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while (!(config.getStatus() == 1)) {
+                    try {
+                        long duringTime =  System.currentTimeMillis() - config.getUtilStartScanTime();
+                        logger.info("已耗时：" + duringTime + " 毫秒");
+                        Thread.sleep(3000);
+                    } catch (Exception e) {
+                        logger.error("显示扫描用时错误：" + e);
+                    }
+                }
+            }
+        }).start();
     }
 
     public void writeConfig2File() {
@@ -126,8 +134,6 @@ public class FileUtil {
                     logger.error("IO 错误：" + e);
                 }
             }
-            config.setNowScanFile(file);
-            config.setNowScanFileModifyTime(new File(file).lastModified());
             stringBuilderForFileInfo.append(fileInfo.toString() + "\r\n");
 
             //缓存的文件信息大于10kb就写文件
@@ -135,6 +141,7 @@ public class FileUtil {
                 try {
                     logger.debug("writing a 10 kb ..." + file);
                     FileUtils.writeStringToFile(new File(logInfoPath), stringBuilderForFileInfo.toString(), true);
+                    this.writeConfig2File();
                     stringBuilderForFileInfo = new StringBuilder();
                     //信息日志文件大于10mb就另起一个日志文件
                     if (new File(logInfoPath).length() > 10 * _1MB_SIZE) {
@@ -147,6 +154,11 @@ public class FileUtil {
                     logger.error("IO 错误：" + e);
                 }
             }
+
+            config.setNowScanFile(file);
+            config.setNowScanFileModifyTime(new File(file).lastModified());
+            config.setDuringTime(System.currentTimeMillis() - config.getUtilStartScanTime());
+
         }
         //end
     }
@@ -174,55 +186,24 @@ public class FileUtil {
         return fullFilePath.substring(0, fullFilePath.lastIndexOf("\\"));
     }
 
-    public boolean isDone() {
-        return this.done;
-    }
-
-    public static void main(String[] args) {
-        FileUtil fileUtil = new FileUtil();
-        /*Thread timeThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (!fileUtil.isDone()) {
-                    try {
-                        fileUtil.showDuringTime();
-                        Thread.sleep(3000);
-                    } catch (Exception e) {
-                        logger.error("显示扫描用时错误：" + e);
-                    }
-                }
-            }
-        });
-        timeThread.start();
-        Thread configThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                while (!fileUtil.isDone()) {
-                    try {
-                        fileUtil.writeConfig2File();
-                        Thread.sleep(3000);
-                    } catch (Exception e) {
-                        logger.error("显示扫描用时错误：" + e);
-                    }
-                }
-            }
-        });
-        configThread.start();
-        FilesAndFolders filesAndFolders = fileUtil.listThisFolderOfFilesAndFolders(config.getNowScanFolder());
-        fileUtil.scanFiles(filesAndFolders.getFiles());
+    public void scanFolder() {
+        //scan start
+        config.setStatus(0);
+        FilesAndFolders filesAndFolders = this.listThisFolderOfFilesAndFolders(config.getNowScanFolder());
+        this.scanFiles(filesAndFolders.getFiles());
 
         while (true) {
             if (filesAndFolders.getFolders().size() == 0) {
-                String preFolderPath = fileUtil.getPreFolder(config.getNowScanFolder());
-                FilesAndFolders temp = fileUtil.listThisFolderOfFilesAndFolders(preFolderPath);
+                String preFolderPath = this.getPreFolder(config.getNowScanFolder());
+                FilesAndFolders temp = this.listThisFolderOfFilesAndFolders(preFolderPath);
                 if (temp.getFolders().size() - 1 == config.getNowScanFolderIndex()) {
                     while (temp.getFolders().size() - 1 == config.getNowScanFolderIndex()) {
                         config.setNowScanFolder(preFolderPath);
                         if (config.getNowScanFolder().equals(config.getScanFolder())) break;
-                        int preFolderIndex = fileUtil.findIndexOfFolder(config.getNowScanFolder());
+                        int preFolderIndex = this.findIndexOfFolder(config.getNowScanFolder());
                         config.setNowScanFolderIndex(preFolderIndex);
-                        preFolderPath = fileUtil.getPreFolder(config.getNowScanFolder());
-                        temp = fileUtil.listThisFolderOfFilesAndFolders(preFolderPath);
+                        preFolderPath = this.getPreFolder(config.getNowScanFolder());
+                        temp = this.listThisFolderOfFilesAndFolders(preFolderPath);
                     }
                 }
                 if (temp.getFolders().size() > config.getNowScanFolderIndex() + 1) {
@@ -238,44 +219,111 @@ public class FileUtil {
             }
 
             if (config.getNowScanFolder().equals(config.getScanFolder())) break;
-            filesAndFolders = fileUtil.listThisFolderOfFilesAndFolders(config.getNowScanFolder());
-            fileUtil.scanFiles(filesAndFolders.getFiles());
+            filesAndFolders = this.listThisFolderOfFilesAndFolders(config.getNowScanFolder());
+            this.scanFiles(filesAndFolders.getFiles());
         }
         try {
+            config.setStatus(1);
             FileUtils.writeStringToFile(new File(logInfoPath), stringBuilderForFileInfo.toString(), true);
-            fileUtil.writeConfig2File();
-            fileUtil.showDuringTime();
-            fileUtil.setDone(true);
+            this.writeConfig2File();
         }catch (Exception e) {
             logger.error("IO 错误：" + e);
-        }*/
-        List<FileInfo> fileInfos = new ArrayList<>();
-        try {
-            List<String> strings = FileUtils.readLines(new File(logInfoPath));
-            strings.forEach(string -> {
-                try {
-                    fileInfos.add(new ObjectMapper().readValue(string, FileInfo.class));
-                } catch (Exception e) {
-
-                }
-            });
-            fileInfos.sort(new Comparator<FileInfo>() {
-                @Override
-                public int compare(FileInfo o1, FileInfo o2) {
-                    if (ObjectUtils.isEmpty(o1.getMd5()) || ObjectUtils.isEmpty(o2.getMd5())) {
-                        return -1;
-                    }
-                    return o1.getMd5().compareTo(o2.getMd5());
-                }
-            });
-            FileUtils.writeStringToFile(new File(logInfoPath + "aaaaaaa"), JsonUtil.getInstance().convertObjectToJsonString(fileInfos));
-        } catch (Exception e) {
-
         }
-
+        //scan end
     }
 
-    public void setDone(boolean done) {
-        this.done = done;
+    public static void main(String[] args) {
+        FileUtil fileUtil = new FileUtil();
+        fileUtil.scanFolder();
+        //sort start
+        FilesAndFolders filesAndFolders = fileUtil.listThisFolderOfFilesAndFolders(path + "log");
+        filesAndFolders.getFiles().forEach(file -> {
+            try {
+                List<FileInfo> fileInfos = new ArrayList<>();
+                List<String> strings = FileUtils.readLines(new File(logInfoPath));
+                strings.forEach(string -> {
+                    try {
+                        fileInfos.add(new ObjectMapper().readValue(string, FileInfo.class));
+                    } catch (Exception e) {
+                    }
+                });
+                fileInfos.sort(new Comparator<FileInfo>() {
+                    @Override
+                    public int compare(FileInfo o1, FileInfo o2) {
+                        if (ObjectUtils.isEmpty(o1.getMd5()) || ObjectUtils.isEmpty(o2.getMd5())) {
+                            return -1;
+                        }
+                        return o1.getMd5().compareTo(o2.getMd5());
+                    }
+                });
+                int bigFileIndex = -1;
+                List<FileInfo> bigFileInfos = new ArrayList<>();
+                List<FileInfo> smallFileInfos = new ArrayList<>();
+                for (int i = 0; i < fileInfos.size(); i++) {
+                    if (ObjectUtils.isEmpty(fileInfos.get(i).getMd5())) {
+                        bigFileInfos.add(fileInfos.get(i));
+                    } else {
+                        smallFileInfos.add(fileInfos.get(i));
+                    }
+                }
+                bigFileInfos.sort(new Comparator<FileInfo>() {
+                    @Override
+                    public int compare(FileInfo o1, FileInfo o2) {
+                        return (int)(o1.getSize() - o2.getSize());
+                    }
+                });
+
+                FileUtils.writeStringToFile(new File(path + "sort/big/" + new File(logInfoPath).getName()),
+                        JsonUtil.getInstance().convertObjectToJsonString(bigFileInfos));
+                FileUtils.writeStringToFile(new File(path + "sort/small/" + new File(logInfoPath).getName()),
+                        JsonUtil.getInstance().convertObjectToJsonString(smallFileInfos));
+
+                //get same fileInfo
+                StringBuilder stringBuilderForSameSmallFileInfo = new StringBuilder();
+                for (int i = 0; i < smallFileInfos.size() - 1; i++) {
+                    String temp = "";
+                    if (smallFileInfos.get(i).getMd5().equals(smallFileInfos.get(i + 1).getMd5())) {
+                        stringBuilderForSameSmallFileInfo.append(smallFileInfos.get(i).toString() + "\r\n");
+                        temp = smallFileInfos.get(i + 1).toString() + "\r\n";
+                    } else {
+                        temp = "";
+                    }
+                    if (!ObjectUtils.isEmpty(temp)) {
+                        stringBuilderForSameSmallFileInfo.append(temp);
+                    }
+                }
+                if (smallFileInfos.get(smallFileInfos.size() - 1).getMd5().equals(smallFileInfos.get(smallFileInfos.size() - 2).getMd5())) {
+                    stringBuilderForSameSmallFileInfo.append(smallFileInfos.get(smallFileInfos.size() - 1).toString() + "\r\n");
+                }
+                FileUtils.writeStringToFile(new File(path + "same/small/" + new File(logInfoPath).getName()),
+                        stringBuilderForSameSmallFileInfo.toString());
+
+                StringBuilder stringBuilderForSameBigFileInfo = new StringBuilder();
+                for (int i = 0; i < bigFileInfos.size() - 1; i++) {
+                    String temp = "";
+                    if (bigFileInfos.get(i).getSize() == bigFileInfos.get(i + 1).getSize()) {
+                        stringBuilderForSameBigFileInfo.append(bigFileInfos.get(i).toString() + "\r\n");
+                        temp = bigFileInfos.get(i + 1).toString() + "\r\n";
+                    } else {
+                        temp = "";
+                    }
+                    if (!ObjectUtils.isEmpty(temp)) {
+                        stringBuilderForSameBigFileInfo.append(temp);
+                    }
+                }
+                if (bigFileInfos.get(bigFileInfos.size() - 1).getSize() == bigFileInfos.get(bigFileInfos.size() - 2).getSize()) {
+                    stringBuilderForSameBigFileInfo.append(bigFileInfos.get(bigFileInfos.size() - 1).toString() + "\r\n");
+                }
+                FileUtils.writeStringToFile(new File(path + "same/big/" + new File(logInfoPath).getName()),
+                        stringBuilderForSameBigFileInfo.toString());
+
+            } catch (Exception e) {
+            }
+        });
+
+        filesAndFolders = fileUtil.listThisFolderOfFilesAndFolders(path + "sort");
+        boolean sortEnd = false;
+
+        //sort end
     }
 }
