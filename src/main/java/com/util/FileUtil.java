@@ -126,20 +126,22 @@ public class FileUtil {
             fileInfo.setFileFullPath(file);
             fileInfo.setSize(new File(file).length());
             fileInfo.setLastModifyTime(new File(file).lastModified());
-            //大于128mb文件不计算md5
-            if (fileInfo.getSize() < BIG_FILE_SIZE) {
-                try {
+            //大于128mb文件切片计算md5
+            try {
+                if (fileInfo.getSize() < BIG_FILE_SIZE) {
                     fileInfo.setMd5(MD5FileUtil.getFileMD5String(new File(file)));
-                }catch (Exception e) {
-                    logger.error("IO 错误：" + e);
+                } else {
+                    fileInfo.setMd5(MD5FileUtil.getBigFileMD5String(new File(file)));
                 }
+            }catch (Exception e) {
+                logger.error("IO 错误：" + e);
             }
             stringBuilderForFileInfo.append(fileInfo.toString() + "\r\n");
 
-            //缓存的文件信息大于10kb就写文件
-            if (stringBuilderForFileInfo.length() > _1KB_SIZE * 10) {
+            //缓存的文件信息大于20kb就写文件
+            if (stringBuilderForFileInfo.length() > _1KB_SIZE * 10 * 2) {
                 try {
-                    logger.debug("writing a 10 kb ..." + file);
+                    logger.debug("writing a 20 kb ..." + file);
                     FileUtils.writeStringToFile(new File(logInfoPath), stringBuilderForFileInfo.toString(), true);
                     this.writeConfig2File();
                     stringBuilderForFileInfo = new StringBuilder();
@@ -234,6 +236,8 @@ public class FileUtil {
 
     public static void main(String[] args) {
         FileUtil fileUtil = new FileUtil();
+        fileUtil.writeConfig2File();
+        fileUtil.showDuringTime();
         fileUtil.scanFolder();
         //sort start
         FilesAndFolders filesAndFolders = fileUtil.listThisFolderOfFilesAndFolders(path + "log");
@@ -250,9 +254,6 @@ public class FileUtil {
                 fileInfos.sort(new Comparator<FileInfo>() {
                     @Override
                     public int compare(FileInfo o1, FileInfo o2) {
-                        if (ObjectUtils.isEmpty(o1.getMd5()) || ObjectUtils.isEmpty(o2.getMd5())) {
-                            return -1;
-                        }
                         return o1.getMd5().compareTo(o2.getMd5());
                     }
                 });
@@ -260,16 +261,16 @@ public class FileUtil {
                 List<FileInfo> bigFileInfos = new ArrayList<>();
                 List<FileInfo> smallFileInfos = new ArrayList<>();
                 for (int i = 0; i < fileInfos.size(); i++) {
-                    if (ObjectUtils.isEmpty(fileInfos.get(i).getMd5())) {
-                        bigFileInfos.add(fileInfos.get(i));
-                    } else {
+                    if (fileInfos.get(i).getSize() < BIG_FILE_SIZE) {
                         smallFileInfos.add(fileInfos.get(i));
+                    } else {
+                        bigFileInfos.add(fileInfos.get(i));
                     }
                 }
                 bigFileInfos.sort(new Comparator<FileInfo>() {
                     @Override
                     public int compare(FileInfo o1, FileInfo o2) {
-                        return (int)(o1.getSize() - o2.getSize());
+                        return o1.getMd5().compareTo(o2.getMd5());
                     }
                 });
 
@@ -281,15 +282,18 @@ public class FileUtil {
                 //get same fileInfo
                 StringBuilder stringBuilderForSameSmallFileInfo = new StringBuilder();
                 for (int i = 0; i < smallFileInfos.size() - 1; i++) {
-                    String temp = "";
                     if (smallFileInfos.get(i).getMd5().equals(smallFileInfos.get(i + 1).getMd5())) {
                         stringBuilderForSameSmallFileInfo.append(smallFileInfos.get(i).toString() + "\r\n");
-                        temp = smallFileInfos.get(i + 1).toString() + "\r\n";
-                    } else {
-                        temp = "";
-                    }
-                    if (!ObjectUtils.isEmpty(temp)) {
-                        stringBuilderForSameSmallFileInfo.append(temp);
+                        stringBuilderForSameSmallFileInfo.append(smallFileInfos.get(i + 1).toString() + "\r\n");
+                        i ++;
+                        while (i < smallFileInfos.size() - 1) {
+                            if (smallFileInfos.get(i).getMd5().equals(smallFileInfos.get(i + 1).getMd5())) {
+                                stringBuilderForSameSmallFileInfo.append(smallFileInfos.get(i).toString() + "\r\n");
+                                i ++;
+                            } else {
+                                break;
+                            }
+                        }
                     }
                 }
                 if (smallFileInfos.get(smallFileInfos.size() - 1).getMd5().equals(smallFileInfos.get(smallFileInfos.size() - 2).getMd5())) {
@@ -300,18 +304,21 @@ public class FileUtil {
 
                 StringBuilder stringBuilderForSameBigFileInfo = new StringBuilder();
                 for (int i = 0; i < bigFileInfos.size() - 1; i++) {
-                    String temp = "";
-                    if (bigFileInfos.get(i).getSize() == bigFileInfos.get(i + 1).getSize()) {
+                    if (bigFileInfos.get(i).getMd5().equals(bigFileInfos.get(i + 1).getMd5())) {
                         stringBuilderForSameBigFileInfo.append(bigFileInfos.get(i).toString() + "\r\n");
-                        temp = bigFileInfos.get(i + 1).toString() + "\r\n";
-                    } else {
-                        temp = "";
-                    }
-                    if (!ObjectUtils.isEmpty(temp)) {
-                        stringBuilderForSameBigFileInfo.append(temp);
+                        stringBuilderForSameBigFileInfo.append(bigFileInfos.get(i + 1).toString() + "\r\n");
+                        i ++;
+                        while (i < bigFileInfos.size() - 1) {
+                            if (bigFileInfos.get(i).getMd5().equals(bigFileInfos.get(i + 1).getMd5())) {
+                                stringBuilderForSameBigFileInfo.append(bigFileInfos.get(i).toString() + "\r\n");
+                                i ++;
+                            } else {
+                                break;
+                            }
+                        }
                     }
                 }
-                if (bigFileInfos.get(bigFileInfos.size() - 1).getSize() == bigFileInfos.get(bigFileInfos.size() - 2).getSize()) {
+                if (bigFileInfos.get(bigFileInfos.size() - 1).getMd5().equals(bigFileInfos.get(bigFileInfos.size() - 2).getMd5())) {
                     stringBuilderForSameBigFileInfo.append(bigFileInfos.get(bigFileInfos.size() - 1).toString() + "\r\n");
                 }
                 FileUtils.writeStringToFile(new File(path + "same/big/" + new File(logInfoPath).getName()),

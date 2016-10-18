@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.security.MessageDigest;
@@ -30,6 +31,42 @@ public class MD5FileUtil {
         FileChannel ch = in.getChannel();
         MappedByteBuffer byteBuffer = ch.map(FileChannel.MapMode.READ_ONLY, 0, file.length());
         messagedigest.update(byteBuffer);
+        return bufferToHex(messagedigest.digest());
+    }
+
+    public static String getBigFileMD5String(File file) throws IOException {
+
+        FileInputStream in = new FileInputStream(file);
+        byte[] byteStart = new byte[500 * 1024];
+        in.read(byteStart, 0, 500 * 1024);
+        long index = file.length() / 6;
+        byte[] byte1 = new byte[200 * 1024];
+        in.skip(index * 1);
+        in.read(byte1);
+        byte[] byte2 = new byte[200 * 1024];
+        in.skip(index * 2);
+        in.read(byte2);
+        byte[] byte3 = new byte[200 * 1024];
+        in.skip(index * 3);
+        in.read(byte3);
+        byte[] byte4 = new byte[200 * 1024];
+        in.skip(index * 4);
+        in.read(byte4);
+        byte[] byte5 = new byte[200 * 1024];
+        in.skip(index * 5);
+        in.read(byte5);
+        byte[] byteEnd = new byte[500 * 1024];
+        in.skip(file.length() - 500 * 1024);
+        in.read(byteEnd);
+        byte[] bytes = new byte[byteStart.length + byte1.length + byte2.length + byte3.length + byte4.length + byte5.length + byteEnd.length];
+        System.arraycopy(byteStart, 0, bytes, 0, byteStart.length);
+        System.arraycopy(byte1, 0, bytes, byteStart.length, byte1.length);
+        System.arraycopy(byte2, 0, bytes, byteStart.length + byte1.length, byte2.length);
+        System.arraycopy(byte3, 0, bytes, byteStart.length + byte1.length + byte2.length, byte3.length);
+        System.arraycopy(byte4, 0, bytes, byteStart.length + byte1.length + byte2.length + byte3.length, byte4.length);
+        System.arraycopy(byte5, 0, bytes, byteStart.length + byte1.length + byte2.length + byte3.length + byte4.length, byte5.length);
+        System.arraycopy(byteEnd, 0, bytes, byteStart.length + byte1.length + byte2.length + byte3.length + byte4.length + byte5.length, byteEnd.length);
+        messagedigest.update(bytes);
         return bufferToHex(messagedigest.digest());
     }
 
